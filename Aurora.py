@@ -13,9 +13,31 @@ nInst = 50 # number of instruments (stocks) is 50
 currentPos = np.zeros(nInst)
 
 
-def getMyPosition(prcSoFar):
-    # This should be a function which calls many other functions imo. 
+
+def predict_nextday_prices(prices):
+    """
+    Calculate the Exponential Moving Average (EMA) for the given prices.
     
+    Parameters:
+    prices (np.array): Array of historical prices for an instrument.
+    window (int): The window size for the EMA.
+    
+    Returns:
+    np.array: The EMA values for the given prices.
+    """
+    
+    window = 10
+    ema = np.zeros_like(prices)
+    alpha = 2 / (window + 1)
+    ema[0] = prices[0]
+    
+    for t in range(1, len(prices)):
+        ema[t] = alpha * prices[t] + (1 - alpha) * ema[t - 1]
+    
+    return ema
+
+
+def getMyPosition(prcSoFar):
     global currentPos
     
     # number of instruments, number of days
@@ -28,47 +50,51 @@ def getMyPosition(prcSoFar):
     '''
     if (nt < 2):
         return np.zeros(nins) # exiting the function early 
+
+    
+    # initialise predicted prices as 0. 
+    predictedPrices = np.zeros(nins) 
+    
+    # set predicted prices for each instrument (stock)
+    for i in range(nins):
+        ma = predict_nextday_prices(prcSoFar[i])
+        predictedPrices[i] = ma[-1]
     
     
-    ''' 
-     calculate log returns
-     
-     returns = PL(profit or loss)
-     
-     prcSoFar[:, -1] = today's price
-     prcSoFar[:, -2] = yesterday's price
-     
-     prcSoFar[:, -1] / prcSoFar[:, -2] is the ratio 
-     change from yesterday to today
-     
-     We used log as log returns are more normally distributed, 
-     and reflect additive standarised change.
-     
+    latest_price = prcSoFar[:, -1]
+    
+    priceChanges = predictedPrices - latest_price
+    
+    # calculate norm of the data then normalise
+    lNorm = np.sqrt(priceChanges.dot(priceChanges))
+    priceChanges /= lNorm
+    
+    
     '''
-     # CHANGE lastRet to predicted_prices - last day
-    lastRet = np.log(prcSoFar[:, -1] / prcSoFar[:, -2])
+    after I have a good algorithm for price estimation I should optimise for the best scaling factor 
     
-    # calculate norm of the data 
-    lNorm = np.sqrt(lastRet.dot(lastRet))
-    # normalise to ensure magnitude of returns is normalised 
-    lastRet /= lNorm
+    Volatility of the Instruments: Higher volatility might require a smaller scaling factor to avoid excessive trading and risk.
+    Risk Tolerance: If you want a more conservative strategy, you might reduce the scaling factor.  
+    Performance Optimization: You can run backtests with different values to see which one gives the best performance 
+    according to your evaluation metrics (mean(PL) - 0.1 * StdDev(PL)).
+    '''
+    scaling_factor = 5000
     
-    ''' Reposition
-    calculate position changes from returns into array
+    '''
+    Reposition: convert changes of price into changes of position
     
-    5000 * lastRet: This scales the normalized log returns by a 
-    factor of 5000. The factor of 5000 is arbitrary and can be tuned. 
+    e.g +10 (buy 10 more)
+    
+    scaling_factor * priceChanges: This scales the prediction by a 
+    factor. The factor is arbitrary and can be tuned. 
     It influences the magnitude of the positions taken.
-    And instead of lastRet, this is exactly where we should insert 
-    our predicted_prices from our modelling for the next day.   
-    
     
     int(x) for x: converts it to integer as it is not possible to 
     take fractional shares.
-    
     '''
-    rpos = np.array([int(x) for x in 5000 * lastRet / prcSoFar[:, -1]])
+    rpos = np.array([int(x) for x in scaling_factor * priceChanges / latest_price])
+
     
-    '''  updates positions with changes '''
+    #  updates positions with changes 
     currentPos = np.array([int(x) for x in currentPos+rpos])
     return currentPos

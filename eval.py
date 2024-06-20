@@ -143,4 +143,4 @@ data scenarios.
 
 print("annSharpe(PL): %.2lf " % sharpe) 
 print("totDvolume: %.0lf " % dvol)
-print("Score: %.2lf" % score)
+print("Score: %.2lf" % score) # bigger the better
