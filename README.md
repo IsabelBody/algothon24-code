@@ -1,6 +1,19 @@
 # Extra libraries
 Please download statsmodels. 
 
+# Trading Algorithm
+
+## Setup
+
+1. Configure AWS credentials:
+   - Update `config.py` with your AWS credentials.
+
+2. Run the setup script to install dependencies and export AWS credentials:
+
+```sh
+chmod +x setup.sh
+./setup.sh
+
 
 
 # Brief
