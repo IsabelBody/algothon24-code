@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from experimental import getMyPosition as getPosition
+from Arima2 import getMyPosition as getPosition
 
 nInst = 0 # number of stocks 
 nt = 0 # number of days 

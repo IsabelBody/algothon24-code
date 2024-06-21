@@ -1,34 +1,24 @@
-import pandas as pd
-
 import warnings
+import pandas as pd
+import numpy as np
+from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.arima.model import ARIMA
-
+from joblib import Parallel, delayed
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore")
 
-
+# Load data
 data_path = 'prices.txt'
 prices_df = pd.read_csv(data_path, delim_whitespace=True, header=None)
-
-import pandas as pd
-import numpy as np
-from statsmodels.tsa.stattools import adfuller
-
-
 
 # Function to perform ADF test
 def adf_test(series):
     result = adfuller(series)
     return result[1]  # returning the p-value
 
-# Initialize results dictionary
-transformation_results = []
-
-# Iterate over each stock
-for i in range(prices_df.shape[1]):
-    stock_series = prices_df.iloc[:, i]
-    
+# Function to compute the best transformation for a stock series
+def compute_best_transformation(stock_series, index):
     # Original series
     pval_original = adf_test(stock_series)
     
@@ -48,22 +38,21 @@ for i in range(prices_df.shape[1]):
     best_transformation = transformations[np.argmin(pvals)]
     best_pval = min(pvals)
     
-    transformation_results.append({
-        'Stock': i + 1,
+    return {
+        'Stock': index + 1,
         'Best Transformation': best_transformation,
         'p-value': best_pval,
         'Stationary': 'Yes' if best_pval < 0.05 else 'No'
-    })
+    }
+
+# Compute transformations in parallel
+transformation_results = Parallel(n_jobs=-1)(delayed(compute_best_transformation)(prices_df.iloc[:, i], i) for i in range(prices_df.shape[1]))
 
 # Create a DataFrame with the results
 transformation_results_df = pd.DataFrame(transformation_results)
 
 # Print the results
 print(transformation_results_df)
-
-
-
-
 
 # Function to fit ARIMA model and predict the next day's price
 def fit_arima_and_predict(transformed_series, order=(1, 1, 1)):
@@ -72,6 +61,7 @@ def fit_arima_and_predict(transformed_series, order=(1, 1, 1)):
     forecast = model_fit.forecast(steps=1)
     return forecast[0]
 
+# Function to get transformed series based on transformation type
 def get_transformed_series(series, transformation_type):
     if transformation_type == 'Original':
         return series
@@ -82,6 +72,9 @@ def get_transformed_series(series, transformation_type):
         return log_series.diff().dropna()
     else:
         raise ValueError("Unknown transformation type")
+
+# Global variable for current position
+currentPos = np.zeros(prices_df.shape[1])
 
 def getMyPosition(prcSoFar, num_instruments=None, num_days=None):
     global currentPos
@@ -103,8 +96,8 @@ def getMyPosition(prcSoFar, num_instruments=None, num_days=None):
     # Prepare to store predicted prices
     predictedPrices = np.zeros(nins)
     
-    # Fit ARIMA and predict next day's price for each instrument
-    for i in range(nins):
+    # Function to process each instrument
+    def process_instrument(i):
         stock_series = prcSoFar[i, :]
         
         # Get best transformation type from your results
@@ -122,12 +115,15 @@ def getMyPosition(prcSoFar, num_instruments=None, num_days=None):
         # Reverse the transformation if needed (e.g., if log differenced)
         if best_transformation == 'Log Differencing':
             last_price = stock_series[-1]
-            predictedPrices[i] = np.exp(np.log(last_price) + prediction)
+            return np.exp(np.log(last_price) + prediction)
         else:
-            predictedPrices[i] = prediction
+            return prediction
+
+    # Predict prices in parallel
+    predictedPrices = Parallel(n_jobs=-1)(delayed(process_instrument)(i) for i in range(nins))
     
     latest_price = prcSoFar[:, -1]
-    priceChanges = predictedPrices - latest_price
+    priceChanges = np.array(predictedPrices) - latest_price
     
     lNorm = np.sqrt(priceChanges.dot(priceChanges))
     priceChanges /= lNorm
@@ -137,4 +133,3 @@ def getMyPosition(prcSoFar, num_instruments=None, num_days=None):
     
     currentPos = np.array([int(x) for x in currentPos + rpos])
     return currentPos
-
