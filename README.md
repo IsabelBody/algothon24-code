@@ -1,3 +1,8 @@
+# Extra libraries
+Please download statsmodels. 
+
+
+
 # Brief
 
 Make the best trading algorithm!
