@@ -1,14 +1,8 @@
 # Extra libraries
 Please download statsmodels. 
 
-# Trading Algorithm
+numpy must be pip install numpy==1.26.4
 
-## Setup
-
-1. Configure AWS credentials:
-   - Update `config.py` with your AWS credentials.
-
-2. Run the setup script to install dependencies and export AWS credentials:
 
 ```sh
 chmod +x setup.sh

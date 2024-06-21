@@ -13,20 +13,20 @@ def adf_test(series):
     result = adfuller(series)
     return result[1]  # returning the p-value
 
-def determine_best_transformation(stock_series):
+def determine_best_transformation(stock_series, stock_index):
     pval_original = adf_test(stock_series)
+    is_stationary_original = pval_original < 0.05
     
     diff_series = np.diff(stock_series)
     pval_diff = adf_test(diff_series)
-    
-    if pval_original < 0.05:
-        return 'Original'
+    is_stationary_diff = pval_diff < 0.05
     
     log_mask = stock_series > 0
     log_series = np.log(stock_series[log_mask])
     log_diff_series = np.diff(log_series)
     pval_log_diff = adf_test(log_diff_series)
-    
+    is_stationary_log_diff = pval_log_diff < 0.05
+        
     pvals = [pval_original, pval_diff, pval_log_diff]
     transformations = ['Original', 'Differencing', 'Log Differencing']
     
@@ -46,12 +46,25 @@ def apply_transformation(stock_series, transformation):
 def fit_arima_model(stock_series, transformation):
     transformed_series = apply_transformation(stock_series, transformation)
     
-    # Fit ARIMA model (example, you'll need to tune parameters)
-    model = ARIMA(transformed_series, order=(1, 1, 0))  # Example order, tune these parameters
-    model_fit = model.fit()
+    # Simplified ARIMA parameter selection
+    orders = [(1, 0, 0), (1, 1, 0), (0, 1, 1)]
+    best_aic = np.inf
+    best_order = None
+    best_model = None
     
-    # Forecast next day's price
-    forecast = model_fit.forecast(steps=1)[0]
+    for order in orders:
+        try:
+            model = ARIMA(transformed_series, order=order)
+            model_fit = model.fit()
+            if model_fit.aic < best_aic:
+                best_aic = model_fit.aic
+                best_order = order
+                best_model = model_fit
+        except:
+            continue
+    
+    # Forecast next day's price using the best model
+    forecast = best_model.forecast(steps=1)[0]
     
     if transformation == 'Differencing':
         forecast += stock_series[-1]
@@ -62,19 +75,19 @@ def fit_arima_model(stock_series, transformation):
 
 def process_stock(i, prcSoFar):
     stock_prices = prcSoFar[i]
-    best_transformation = determine_best_transformation(stock_prices)
+    best_transformation = determine_best_transformation(stock_prices, i)
     predicted_price = fit_arima_model(stock_prices, best_transformation)
     return predicted_price
 
 def getMyPosition(prcSoFar):
     global currentPos
-    (nins, nt) = prcSoFar.shape
+    (nInst, nt) = prcSoFar.shape
 
     if nt < 2:
-        return np.zeros(nins)
+        return np.zeros(nInst)
     
     # Parallel processing for stock predictions
-    predictedPrices = Parallel(n_jobs=-1)(delayed(process_stock)(i, prcSoFar) for i in range(nins))
+    predictedPrices = Parallel(n_jobs=-1)(delayed(process_stock)(i, prcSoFar) for i in range(nInst))
     
     predictedPrices = np.array(predictedPrices)
     latest_price = prcSoFar[:, -1]
@@ -86,3 +99,7 @@ def getMyPosition(prcSoFar):
     currentPos = np.array([int(x) for x in currentPos + rpos])
     
     return currentPos
+
+# Example usage
+# prices = np.random.randn(50, 200)  # Example price data
+# print(getMyPosition(prices))
