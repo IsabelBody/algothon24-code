@@ -1,20 +1,15 @@
-
-import numpy as np
 import pandas as pd
+
+import warnings
 from statsmodels.tsa.arima.model import ARIMA
+
+
+# Suppress specific warnings
+warnings.filterwarnings("ignore")
+
 
 data_path = 'prices.txt'
 prices_df = pd.read_csv(data_path, delim_whitespace=True, header=None)
-
-
-
-nInst = 50 # number of instruments (stocks) is 50
-
-
-# initialise current position to 0 for each instrument
-# we hold no shares, we've borrowed no shares
-currentPos = np.zeros(nInst)
-
 
 import pandas as pd
 import numpy as np
@@ -67,6 +62,9 @@ transformation_results_df = pd.DataFrame(transformation_results)
 print(transformation_results_df)
 
 
+
+
+
 # Function to fit ARIMA model and predict the next day's price
 def fit_arima_and_predict(transformed_series, order=(1, 1, 1)):
     model = ARIMA(transformed_series, order=order)
@@ -85,11 +83,19 @@ def get_transformed_series(series, transformation_type):
     else:
         raise ValueError("Unknown transformation type")
 
-def getMyPosition(prcSoFar):
+def getMyPosition(prcSoFar, num_instruments=None, num_days=None):
     global currentPos
     
     (nins, nt) = prcSoFar.shape
-    (nins, nt) = (5, 100)
+    
+    # Adjust for testing with fewer instruments and days
+    if num_instruments is not None and num_instruments < nins:
+        prcSoFar = prcSoFar[:num_instruments, :]
+        nins = num_instruments
+    
+    if num_days is not None and num_days < nt:
+        prcSoFar = prcSoFar[:, :num_days]
+        nt = num_days
     
     if nt < 2:
         return np.zeros(nins)  # Insufficient data to predict
@@ -131,3 +137,4 @@ def getMyPosition(prcSoFar):
     
     currentPos = np.array([int(x) for x in currentPos + rpos])
     return currentPos
+
