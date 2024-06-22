@@ -5,7 +5,14 @@ from joblib import Parallel, delayed
 import warnings
 warnings.filterwarnings('ignore')
 
-# Takes 10 minutes 
+# Takes just below 10 minutes 
+
+# mean(PL): 38.3
+# return: 0.00974
+# StdDev(PL): 447.44
+# annSharpe(PL): 1.35
+# totDvolume: 986408
+# Score: -6.48
 
 nInst = 50  # number of instruments (stocks)
 currentPos = np.zeros(nInst)

@@ -4,6 +4,16 @@ from statsmodels.tsa.stattools import adfuller
 import warnings
 from joblib import Parallel, delayed
 
+# Takes 30 minutes 
+# mean(PL): 56.4
+# return: 0.00881
+# StdDev(PL): 387.85
+# annSharpe(PL): 2.30
+# totDvolume: 1606160
+# Score: 17.62
+
+
+
 warnings.filterwarnings('ignore')
 
 nInst = 50  # number of instruments (stocks)

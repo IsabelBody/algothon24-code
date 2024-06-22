@@ -3,16 +3,8 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 from joblib import Parallel, delayed
 
-
-# takes around 11 minutes , but for a much better return 
-
-# mean(PL): 46.3
-# return: 0.01195
-# StdDev(PL): 443.83
-# annSharpe(PL): 1.65
-# totDvolume: 971388 
-# Score: 1.87
-
+import warnings
+warnings.filterwarnings('ignore')
 
 nInst = 50  # number of instruments (stocks)
 currentPos = np.zeros(nInst)
@@ -80,10 +72,52 @@ def getMyPosition(prcSoFar):
     predictedPrices = np.array(predictedPrices)
     latest_price = prcSoFar[:, -1]
     priceChanges = predictedPrices - latest_price
-    lNorm = np.sqrt(np.dot(priceChanges, priceChanges))
-    priceChanges /= lNorm
-    scaling_factor = 5000
-    rpos = np.array([int(x) for x in scaling_factor * priceChanges / latest_price])
-    currentPos = np.array([int(x) for x in currentPos + rpos])
+
+    # Calculate volatility for each instrument
+    volatility = np.std(prcSoFar, axis=1)
+
+    # Avoid division by zero and extremely low volatility
+    volatility = np.where(volatility == 0, 1, volatility)
+
+    # Normalize price changes by volatility
+    risk_adjusted_changes = priceChanges / volatility
+    lNorm = np.sqrt(np.dot(risk_adjusted_changes, risk_adjusted_changes))
+    risk_adjusted_changes /= lNorm
+
+    # Dynamic scaling factor based on overall market volatility
+    market_volatility = np.std(latest_price)
+    scaling_factor = 5000 * (1 / market_volatility)
+
+    # Calculate desired positions
+    rpos = scaling_factor * risk_adjusted_changes / latest_price
+
+    # Apply position limits
+    max_positions = 10000 / latest_price
+    rpos = np.clip(rpos, -max_positions, max_positions)
     
+    new_positions = currentPos + rpos
+    currentPos = np.clip(new_positions, -max_positions, max_positions).astype(int)
+
     return currentPos
+
+# Assuming `data` is your dataset containing prices for 500 days
+data = np.random.rand(nInst, 500)  # replace with actual data
+
+# Splitting the data
+train_data = data[:, :400]
+val_data = data[:, 400:500]
+
+# Evaluate on training set
+train_positions = getMyPosition(train_data)
+# Compute metrics on train_positions...
+
+# Evaluate on validation set
+val_positions = getMyPosition(val_data)
+# Compute metrics on val_positions...
+
+# Compare training and validation performance to detect overfitting
+
+# Finally, evaluate on test set when ready
+# test_data = ... (the additional 250 days of data)
+# test_positions = getMyPosition(test_data)
+# Compute metrics on test_positions...
