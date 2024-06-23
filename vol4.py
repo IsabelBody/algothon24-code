@@ -6,14 +6,6 @@ from joblib import Parallel, delayed
 import warnings
 warnings.filterwarnings('ignore')
 
-# mean(PL): 4.9
-# return: 0.02726
-# StdDev(PL): 22.08
-# annSharpe(PL): 3.49
-# totDvolume: 44819
-# Score: 2.66
-# Time: 10m10s46
-
 nInst = 50  # number of instruments (stocks)
 currentPos = np.zeros(nInst)
 
@@ -61,7 +53,7 @@ def fit_arima_model(stock_series):
         return np.nan
 
 def smooth_series(series, window=5):
-    return pd.Series(series).rolling(window, min_periods=1).mean().values
+    return pd.Series(series).ewm(span=window, adjust=False).mean().values
 
 def process_stock(i, prcSoFar):
     stock_prices = prcSoFar[i]
@@ -71,6 +63,12 @@ def process_stock(i, prcSoFar):
     predicted_price = fit_arima_model(transformed_series)
     return predicted_price
 
+def calculate_scaling_factor(prcSoFar, risk_adjusted_changes):
+    recent_performance = np.mean(prcSoFar[:, -10:], axis=1)  # Average performance of the last 10 days
+    performance_adjustment = 1 + np.tanh(recent_performance / 1000)  # Dynamic adjustment
+    market_volatility = np.std(prcSoFar[:, -1])
+    return 5000 * (1 / market_volatility) * performance_adjustment
+
 def getMyPosition(prcSoFar):
     global currentPos
     nInst, nt = prcSoFar.shape
@@ -79,7 +77,7 @@ def getMyPosition(prcSoFar):
         return np.zeros(nInst)
     
     # Parallel processing for stock predictions
-    predictedPrices = Parallel(n_jobs=-1)(delayed(process_stock)(i, prcSoFar) for i in range(nInst))
+    predictedPrices = Parallel(n_jobs=-1, prefer="threads")(delayed(process_stock)(i, prcSoFar) for i in range(nInst))
     
     predictedPrices = np.array(predictedPrices)
     latest_price = prcSoFar[:, -1]
@@ -96,9 +94,8 @@ def getMyPosition(prcSoFar):
     lNorm = np.sqrt(np.dot(risk_adjusted_changes, risk_adjusted_changes))
     risk_adjusted_changes /= lNorm
 
-    # Dynamic scaling factor based on overall market volatility
-    market_volatility = np.std(latest_price)
-    scaling_factor = 5000 * (1 / market_volatility)
+    # Dynamic scaling factor based on overall market volatility and recent performance
+    scaling_factor = calculate_scaling_factor(prcSoFar, risk_adjusted_changes)
 
     # Calculate desired positions
     rpos = scaling_factor * risk_adjusted_changes / latest_price

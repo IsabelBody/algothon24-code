@@ -6,13 +6,16 @@ from joblib import Parallel, delayed
 import warnings
 warnings.filterwarnings('ignore')
 
-# mean(PL): 4.9
-# return: 0.02726
-# StdDev(PL): 22.08
-# annSharpe(PL): 3.49
-# totDvolume: 44819
-# Score: 2.66
-# Time: 10m10s46
+# =====
+# mean(PL): 5.1
+# return: 0.02666
+# StdDev(PL): 23.37
+# annSharpe(PL): 3.48
+# totDvolume: 48399
+# Score: 2.80
+# time: 11m50s18
+
+
 
 nInst = 50  # number of instruments (stocks)
 currentPos = np.zeros(nInst)
@@ -71,6 +74,12 @@ def process_stock(i, prcSoFar):
     predicted_price = fit_arima_model(transformed_series)
     return predicted_price
 
+def calculate_scaling_factor(prcSoFar, risk_adjusted_changes):
+    recent_performance = np.mean(prcSoFar[:, -10:], axis=1)  # Average performance of the last 10 days
+    performance_adjustment = 1 + np.tanh(recent_performance / 1000)  # Dynamic adjustment
+    market_volatility = np.std(prcSoFar[:, -1])
+    return 5000 * (1 / market_volatility) * performance_adjustment
+
 def getMyPosition(prcSoFar):
     global currentPos
     nInst, nt = prcSoFar.shape
@@ -96,9 +105,8 @@ def getMyPosition(prcSoFar):
     lNorm = np.sqrt(np.dot(risk_adjusted_changes, risk_adjusted_changes))
     risk_adjusted_changes /= lNorm
 
-    # Dynamic scaling factor based on overall market volatility
-    market_volatility = np.std(latest_price)
-    scaling_factor = 5000 * (1 / market_volatility)
+    # Dynamic scaling factor based on overall market volatility and recent performance
+    scaling_factor = calculate_scaling_factor(prcSoFar, risk_adjusted_changes)
 
     # Calculate desired positions
     rpos = scaling_factor * risk_adjusted_changes / latest_price

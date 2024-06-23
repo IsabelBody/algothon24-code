@@ -1,18 +1,19 @@
 import numpy as np
-import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 from joblib import Parallel, delayed
 import warnings
+import pandas as pd
+
 warnings.filterwarnings('ignore')
 
-# mean(PL): 4.9
-# return: 0.02726
-# StdDev(PL): 22.08
-# annSharpe(PL): 3.49
-# totDvolume: 44819
-# Score: 2.66
-# Time: 10m10s46
+# mean(PL): 25.4
+# return: 0.03480
+# StdDev(PL): 129.70
+# annSharpe(PL): 3.09
+# totDvolume: 183000
+# Score: 12.40
+
 
 nInst = 50  # number of instruments (stocks)
 currentPos = np.zeros(nInst)
@@ -42,6 +43,8 @@ def determine_best_transformation(stock_series):
     return best_transformation
 
 def apply_transformation(stock_series, transformation):
+    if (len(stock_series) < 2):
+        return stock_series
     if transformation == 'Original':
         return stock_series
     elif transformation == 'Differencing':
@@ -60,14 +63,10 @@ def fit_arima_model(stock_series):
     except:
         return np.nan
 
-def smooth_series(series, window=5):
-    return pd.Series(series).rolling(window, min_periods=1).mean().values
-
 def process_stock(i, prcSoFar):
     stock_prices = prcSoFar[i]
-    smoothed_prices = smooth_series(stock_prices)
-    best_transformation = determine_best_transformation(smoothed_prices)
-    transformed_series = apply_transformation(smoothed_prices, best_transformation)
+    best_transformation = determine_best_transformation(stock_prices)
+    transformed_series = apply_transformation(stock_prices, best_transformation)
     predicted_price = fit_arima_model(transformed_series)
     return predicted_price
 
@@ -85,18 +84,21 @@ def getMyPosition(prcSoFar):
     latest_price = prcSoFar[:, -1]
     priceChanges = predictedPrices - latest_price
 
-    # Calculate volatility for each instrument
-    volatility = np.std(prcSoFar, axis=1)
+    # Calculate EMA for each instrument as a volatility measure
+    def ema(series, span=20):
+        return series.ewm(span=span, adjust=False).mean().values[-1]
+    
+    volatilities = np.array([ema(pd.Series(prcSoFar[i])) for i in range(nInst)])
 
     # Avoid division by zero and extremely low volatility
-    volatility = np.where(volatility == 0, 1, volatility)
+    volatilities = np.where(volatilities == 0, 1, volatilities)
 
     # Normalize price changes by volatility
-    risk_adjusted_changes = priceChanges / volatility
+    risk_adjusted_changes = priceChanges / volatilities
     lNorm = np.sqrt(np.dot(risk_adjusted_changes, risk_adjusted_changes))
     risk_adjusted_changes /= lNorm
 
-    # Dynamic scaling factor based on overall market volatility
+    # Calculate dynamic scaling factor based on overall market volatility
     market_volatility = np.std(latest_price)
     scaling_factor = 5000 * (1 / market_volatility)
 
@@ -110,9 +112,4 @@ def getMyPosition(prcSoFar):
     new_positions = currentPos + rpos
     currentPos = np.clip(new_positions, -max_positions, max_positions).astype(int)
 
-    # Diversify positions: Reduce positions based on an equal weight strategy
-    total_value = np.sum(np.abs(currentPos) * latest_price)
-    target_value_per_stock = total_value / nInst
-    diversified_positions = np.clip(currentPos, -target_value_per_stock / latest_price, target_value_per_stock / latest_price).astype(int)
-
-    return diversified_positions
+    return currentPos
